@@ -19,7 +19,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Diegogogo',
+      title: 'SpeakSee',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
@@ -46,12 +46,12 @@ class MainLayout extends StatefulWidget {
 class _MainLayoutState extends State<MainLayout> {
   int _selectedIndex = 0;
 
-  static const List<Widget> _pages = <Widget>[
-    DashboardScreen(),
-    TranscribeScreen(),
-    SpeakScreen(),
-    HistoryScreen(),
-    SettingsScreen(),
+  List<Widget> get _pages => [
+    DashboardScreen(onNavigateTab: _onItemTapped),
+    const TranscribeScreen(),
+    SpeakScreen(onNavigateToHistory: () => _onItemTapped(3)),
+    const HistoryScreen(),
+    const SettingsScreen(),
   ];
 
   void _onItemTapped(int index) {

@@ -89,4 +89,11 @@ class StorageService {
   static Future<void> setSettingString(String key, String value) async {
     await _prefs.setString(key, value);
   }
+
+  static double getFontSizeMultiplier() {
+    String scale = getSettingString('font_size_scale', 'Mediano');
+    if (scale == 'Pequeño') return 0.85;
+    if (scale == 'Grande') return 1.35;
+    return 1.0;
+  }
 }

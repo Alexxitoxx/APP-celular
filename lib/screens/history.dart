@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../services/storage_service.dart';
 
 class HistoryScreen extends StatefulWidget {
@@ -34,8 +35,25 @@ class _HistoryScreenState extends State<HistoryScreen> {
     _loadHistory();
   }
 
+  void _copyItemText(String text) {
+    Clipboard.setData(ClipboardData(text: text));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.check_circle_outline, color: Colors.white),
+            SizedBox(width: 8),
+            Text('¡Transcripción copiada al portapapeles! 📋'),
+          ],
+        ),
+        backgroundColor: Color(0xFF7C3AED),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final double scale = StorageService.getFontSizeMultiplier();
     List<HistoryItem> filteredItems = _historyItems.where((item) {
       return item.text.toLowerCase().contains(_searchQuery.toLowerCase()) ||
              item.date.toLowerCase().contains(_searchQuery.toLowerCase());
@@ -51,12 +69,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Historial',
                   style: TextStyle(
-                    fontSize: 20,
+                    fontSize: 20 * scale,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF7C3AED),
+                    color: const Color(0xFF7C3AED),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -143,8 +161,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
+                              children: [                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
                                     Row(
@@ -154,7 +171,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                         Text(
                                           item.date,
                                           style: TextStyle(
-                                            fontSize: 12,
+                                            fontSize: 12 * scale,
                                             fontWeight: FontWeight.w500,
                                             color: Colors.grey[400],
                                           ),
@@ -172,7 +189,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                       child: Text(
                                         item.type,
                                         style: TextStyle(
-                                          fontSize: 10,
+                                          fontSize: 10 * scale,
                                           fontWeight: FontWeight.bold,
                                           color: item.type == "Escuchado" 
                                               ? const Color(0xFF7C3AED) 
@@ -185,9 +202,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                 const SizedBox(height: 12),
                                 Text(
                                   '"${item.text}"',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: Colors.black87,
-                                    fontSize: 14,
+                                    fontSize: 14 * scale,
                                     height: 1.5,
                                   ),
                                 ),
@@ -203,8 +220,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                         shape: BoxShape.circle,
                                       ),
                                       child: IconButton(
-                                        icon: Icon(Icons.file_download_outlined, size: 18, color: Colors.grey[400]),
-                                        onPressed: () {}, // Could implement share/download
+                                        icon: Icon(Icons.copy, size: 18, color: Colors.grey[400]),
+                                        onPressed: () => _copyItemText(item.text),
                                         constraints: const BoxConstraints(),
                                         padding: const EdgeInsets.all(8),
                                       ),

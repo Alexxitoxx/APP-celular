@@ -135,7 +135,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _buildSettingGroup(
                   'PREFERENCIAS DE AUDIO',
                   [
-                    _buildSettingItem(icon: Icons.volume_up, label: 'Volumen del altavoz', value: _volumeSpeaker),
+                    _buildSettingItem(
+                      icon: Icons.volume_up, 
+                      label: 'Volumen del altavoz', 
+                      value: _volumeSpeaker,
+                      onTap: () => _showOptionsModal(
+                        'volume_speaker', 
+                        'Volumen del altavoz 🔊', 
+                        ['Bajo', 'Medio', 'Alto'],
+                      ),
+                    ),
                     _buildSettingItem(
                       icon: Icons.dark_mode_outlined, 
                       label: 'Modo silencioso', 
@@ -150,7 +159,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _buildSettingGroup(
                   'APARIENCIA Y TEXTO',
                   [
-                    _buildSettingItem(icon: Icons.text_fields, label: 'Tamaño de texto', value: _textSize),
+                    _buildSettingItem(
+                      icon: Icons.text_fields, 
+                      label: 'Tamaño de texto', 
+                      value: _textSize,
+                      onTap: () => _showOptionsModal(
+                        'text_size', 
+                        'Tamaño de texto 🔠', 
+                        ['Pequeño', 'Mediano', 'Grande'],
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 24),
@@ -165,7 +183,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       toggleActive: _emergencyAlerts,
                       onToggle: (val) => _updateToggle('emergency_alerts', val),
                     ),
-                    _buildSettingItem(icon: Icons.volume_up, label: 'Tono de alerta', value: _alertTone),
+                    _buildSettingItem(
+                      icon: Icons.volume_up, 
+                      label: 'Tono de alerta', 
+                      value: _alertTone,
+                      onTap: () => _showOptionsModal(
+                        'alert_tone', 
+                        'Tono de alerta 🔔', 
+                        ['Suave', 'Medio', 'Fuerte'],
+                      ),
+                    ),
                     _buildSettingItem(
                       icon: Icons.vibration, 
                       label: 'Vibración en alertas', 
@@ -210,7 +237,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     color: Colors.transparent,
                     child: InkWell(
                       borderRadius: BorderRadius.circular(16),
-                      onTap: () {},
+                      onTap: _showHelpModal,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -232,6 +259,146 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  void _showOptionsModal(String key, String title, List<String> options) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        String currentValue = StorageService.getSettingString(key, options[0]);
+        return Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF7C3AED),
+                ),
+              ),
+              const SizedBox(height: 16),
+              ...options.map((opt) {
+                bool isSelected = opt == currentValue;
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    opt,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      color: isSelected ? const Color(0xFF7C3AED) : Colors.black87,
+                    ),
+                  ),
+                  trailing: isSelected 
+                      ? const Icon(Icons.check_circle, color: Color(0xFF7C3AED)) 
+                      : null,
+                  onTap: () {
+                    _updateString(key, opt);
+                    Navigator.pop(context);
+                  },
+                );
+              }).toList(),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showHelpModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Ayuda y Soporte 📖',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF7C3AED),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _buildHelpItem(
+                  '¿Cómo funciona el Detector de Peligros?',
+                  'Monitorea el entorno mediante el micrófono local. Si se detecta un ruido muy fuerte (decibelios altos) o palabras clave de emergencia como "sismo", "ambulancia" o "patrulla", la aplicación disparará alertas de inmediato.',
+                ),
+                _buildHelpItem(
+                  '¿Qué tipo de alertas genera?',
+                  'Genera una secuencia estroboscópica brillante en la pantalla (rojo y amarillo), parpadea el flash de la cámara trasera de forma ultra-rápida y emite una vibración continua de alta intensidad para alertar al usuario táctil y visualmente.',
+                ),
+                _buildHelpItem(
+                  '¿Funciona sin conexión a Internet?',
+                  '¡Sí! Tanto el reconocimiento de voz del dictado como el detector de peligros operan de forma local en el dispositivo físico, garantizando que el usuario esté protegido incluso si no hay datos móviles o señal celular.',
+                ),
+                _buildHelpItem(
+                  'Información del Proyecto',
+                  'Desarrollado para el proyecto académico de la materia de Interacción Humano-Máquina.\n\nEstudiante: Alexxitoxx / Integrantes del Equipo.',
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildHelpItem(String title, String content) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            content,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[600],
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Divider(color: Colors.grey.withOpacity(0.1)),
         ],
       ),
     );
@@ -264,18 +431,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ],
           ),
-          child: Column(
-            children: items.asMap().entries.map((entry) {
-              int idx = entry.key;
-              Widget item = entry.value;
-              return Column(
-                children: [
-                  item,
-                  if (idx != items.length - 1)
-                    Divider(height: 1, color: Colors.grey.withOpacity(0.1), indent: 16, endIndent: 16),
-                ],
-              );
-            }).toList(),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: Column(
+              children: items.asMap().entries.map((entry) {
+                int idx = entry.key;
+                Widget item = entry.value;
+                return Column(
+                  children: [
+                    item,
+                    if (idx != items.length - 1)
+                      Divider(height: 1, color: Colors.grey.withOpacity(0.1), indent: 16, endIndent: 16),
+                  ],
+                );
+              }).toList(),
+            ),
           ),
         ),
       ],
@@ -289,61 +459,68 @@ class _SettingsScreenState extends State<SettingsScreen> {
     bool isToggle = false,
     bool toggleActive = false,
     Function(bool)? onToggle,
+    VoidCallback? onTap,
   }) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: isToggle ? null : onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF5F3FF),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Icon(icon, color: const Color(0xFF7C3AED), size: 20),
+              Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF5F3FF),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Icon(icon, color: const Color(0xFF7C3AED), size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.black87,
+              if (isToggle)
+                SizedBox(
+                  height: 24,
+                  child: Switch(
+                    value: toggleActive,
+                    onChanged: onToggle,
+                    activeColor: Colors.white,
+                    activeTrackColor: const Color(0xFF7C3AED),
+                    inactiveThumbColor: Colors.white,
+                    inactiveTrackColor: Colors.grey[300],
+                  ),
+                )
+              else if (value != null)
+                Row(
+                  children: [
+                    Text(
+                      value,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[400],
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(Icons.chevron_right, color: Colors.grey[300], size: 20),
+                  ],
                 ),
-              ),
             ],
           ),
-          if (isToggle)
-            SizedBox(
-              height: 24,
-              child: Switch(
-                value: toggleActive,
-                onChanged: onToggle,
-                activeColor: Colors.white,
-                activeTrackColor: const Color(0xFF7C3AED),
-                inactiveThumbColor: Colors.white,
-                inactiveTrackColor: Colors.grey[300],
-              ),
-            )
-          else if (value != null)
-            Row(
-              children: [
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[400],
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Icon(Icons.chevron_right, color: Colors.grey[300], size: 20),
-              ],
-            ),
-        ],
+        ),
       ),
     );
   }

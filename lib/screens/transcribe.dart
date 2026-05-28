@@ -1,5 +1,6 @@
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../services/storage_service.dart';
 import 'package:intl/intl.dart';
@@ -68,11 +69,13 @@ class _TranscribeScreenState extends State<TranscribeScreen> with SingleTickerPr
           _text = ""; // clear previous text
           _pulseController.repeat();
         });
+        
+        String locale = StorageService.getSettingString('selected_language', 'es_MX');
         _speech.listen(
           onResult: (val) => setState(() {
             _text = val.recognizedWords;
           }),
-          localeId: 'es_ES', // Can use system locale if preferred
+          localeId: locale,
         );
       }
     } else {
@@ -102,8 +105,87 @@ class _TranscribeScreenState extends State<TranscribeScreen> with SingleTickerPr
     }
   }
 
+  void _showLanguageSelector() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        String currentLocale = StorageService.getSettingString('selected_language', 'es_MX');
+        final Map<String, String> languages = {
+          'es_MX': 'Español (México) 🇲🇽',
+          'es_ES': 'Español (España) 🇪🇸',
+          'en_US': 'Inglés (Estados Unidos) 🇺🇸',
+        };
+        return Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Idioma del Dictado 🌐',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF7C3AED),
+                ),
+              ),
+              const SizedBox(height: 16),
+              ...languages.entries.map((entry) {
+                bool isSelected = entry.key == currentLocale;
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    entry.value,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      color: isSelected ? const Color(0xFF7C3AED) : Colors.black87,
+                    ),
+                  ),
+                  trailing: isSelected 
+                      ? const Icon(Icons.check_circle, color: Color(0xFF7C3AED)) 
+                      : null,
+                  onTap: () {
+                    StorageService.setSettingString('selected_language', entry.key);
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Idioma cambiado a ${entry.value}')),
+                    );
+                  },
+                );
+              }).toList(),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _copyToClipboard() {
+    if (_text.isNotEmpty) {
+      Clipboard.setData(ClipboardData(text: _text));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.check_circle_outline, color: Colors.white),
+              SizedBox(width: 8),
+              Text('¡Texto copiado al portapapeles! 📋'),
+            ],
+          ),
+          backgroundColor: Color(0xFF7C3AED),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final double scale = StorageService.getFontSizeMultiplier();
     return SafeArea(
       child: Column(
         children: [
@@ -114,12 +196,12 @@ class _TranscribeScreenState extends State<TranscribeScreen> with SingleTickerPr
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
+                Text(
                   'Modo Escucha',
                   style: TextStyle(
-                    fontSize: 20,
+                    fontSize: 20 * scale,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF7C3AED),
+                    color: const Color(0xFF7C3AED),
                   ),
                 ),
                 Container(
@@ -129,7 +211,7 @@ class _TranscribeScreenState extends State<TranscribeScreen> with SingleTickerPr
                   ),
                   child: IconButton(
                     icon: const Icon(Icons.tune, color: Color(0xFF7C3AED)),
-                    onPressed: () {},
+                    onPressed: _showLanguageSelector,
                   ),
                 )
               ],
@@ -162,8 +244,8 @@ class _TranscribeScreenState extends State<TranscribeScreen> with SingleTickerPr
                               child: RichText(
                                 text: TextSpan(
                                   text: _text,
-                                  style: const TextStyle(
-                                    fontSize: 24,
+                                  style: TextStyle(
+                                    fontSize: 24 * scale,
                                     color: Colors.black87,
                                     height: 1.5,
                                   ),
@@ -206,8 +288,8 @@ class _TranscribeScreenState extends State<TranscribeScreen> with SingleTickerPr
                                     ],
                                   ),
                                   child: IconButton(
-                                    icon: const Icon(Icons.share, color: Colors.white),
-                                    onPressed: () {},
+                                    icon: const Icon(Icons.copy, color: Colors.white),
+                                    onPressed: _copyToClipboard,
                                   ),
                                 ),
                               ],
@@ -226,7 +308,7 @@ class _TranscribeScreenState extends State<TranscribeScreen> with SingleTickerPr
                           Text(
                             _isListening ? 'Escuchando...' : 'Presiona el botón para comenzar',
                             style: TextStyle(
-                              fontSize: 18,
+                              fontSize: 18 * scale,
                               fontWeight: FontWeight.w500,
                               color: const Color(0xFF7C3AED).withOpacity(0.5),
                             ),

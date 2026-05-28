@@ -4,7 +4,8 @@ import '../services/storage_service.dart';
 import 'package:intl/intl.dart';
 
 class SpeakScreen extends StatefulWidget {
-  const SpeakScreen({super.key});
+  final VoidCallback? onNavigateToHistory;
+  const SpeakScreen({super.key, this.onNavigateToHistory});
 
   @override
   State<SpeakScreen> createState() => _SpeakScreenState();
@@ -118,6 +119,7 @@ class _SpeakScreenState extends State<SpeakScreen> with SingleTickerProviderStat
   @override
   Widget build(BuildContext context) {
     final bool hasText = _textController.text.isNotEmpty;
+    final double scale = StorageService.getFontSizeMultiplier();
 
     return SafeArea(
       child: Column(
@@ -129,12 +131,12 @@ class _SpeakScreenState extends State<SpeakScreen> with SingleTickerProviderStat
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
+                Text(
                   'Texto a Voz',
                   style: TextStyle(
-                    fontSize: 20,
+                    fontSize: 20 * scale,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF7C3AED),
+                    color: const Color(0xFF7C3AED),
                   ),
                 ),
                 Container(
@@ -144,7 +146,7 @@ class _SpeakScreenState extends State<SpeakScreen> with SingleTickerProviderStat
                   ),
                   child: IconButton(
                     icon: const Icon(Icons.history, color: Color(0xFF7C3AED)),
-                    onPressed: () {}, // Could navigate to history tab
+                    onPressed: widget.onNavigateToHistory,
                   ),
                 )
               ],
@@ -175,8 +177,8 @@ class _SpeakScreenState extends State<SpeakScreen> with SingleTickerProviderStat
                           controller: _textController,
                           maxLines: 6,
                           minLines: 6,
-                          style: const TextStyle(
-                            fontSize: 24,
+                          style: TextStyle(
+                            fontSize: 24 * scale,
                             fontWeight: FontWeight.w500,
                             color: Colors.black87,
                           ),

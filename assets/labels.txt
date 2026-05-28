@@ -1,0 +1,4 @@
+0 Alerta sismica
+1 Ambulancia
+2 Patrulla
+3 Ruido de fondo
