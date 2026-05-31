@@ -1,8 +1,12 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../services/storage_service.dart';
+import '../widgets/avatar_helper.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  final VoidCallback? onSettingsChanged;
+  const SettingsScreen({super.key, this.onSettingsChanged});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -18,6 +22,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _volumeSpeaker = 'Alto';
   String _textSize = 'Grande';
   String _alertTone = 'Fuerte';
+
+  String _firstName = 'María';
+  String _lastName = 'Gómez';
+  String _userAvatarEmoji = '👩‍🦰';
+  String _userAvatarUrl = '';
+  String _userAvatarImagePath = '';
+
+  String get _userName => '$_firstName $_lastName';
 
   @override
   void initState() {
@@ -35,21 +47,376 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _volumeSpeaker = StorageService.getSettingString('volume_speaker', 'Alto');
       _textSize = StorageService.getSettingString('text_size', 'Grande');
       _alertTone = StorageService.getSettingString('alert_tone', 'Fuerte');
+
+      _firstName = StorageService.getSettingString('user_first_name', 'María');
+      _lastName = StorageService.getSettingString('user_last_name', 'Gómez');
+      _userAvatarEmoji = StorageService.getSettingString('user_avatar_emoji', '👩‍🦰');
+      _userAvatarUrl = StorageService.getSettingString('user_avatar_url', '');
+      _userAvatarImagePath = StorageService.getSettingString('user_avatar_image_path', '');
     });
   }
 
   void _updateToggle(String key, bool value) {
     StorageService.setSettingBool(key, value);
     _loadSettings();
+    if (widget.onSettingsChanged != null) {
+      widget.onSettingsChanged!();
+    }
   }
 
   void _updateString(String key, String value) {
     StorageService.setSettingString(key, value);
     _loadSettings();
+    if (widget.onSettingsChanged != null) {
+      widget.onSettingsChanged!();
+    }
+  }
+
+  void _showEditProfileModal() {
+    final double scale = StorageService.getFontSizeMultiplier();
+    final TextEditingController firstCtrl = TextEditingController(text: _firstName);
+    final TextEditingController lastCtrl = TextEditingController(text: _lastName);
+    final TextEditingController urlCtrl = TextEditingController(text: _userAvatarUrl);
+    String selectedEmoji = _userAvatarEmoji;
+    String pickedImagePath = _userAvatarImagePath;
+    
+    // Preset emojis list (24 items)
+    final List<String> presetEmojis = [
+      '👩‍🦰', '👨‍🦱', '👱‍♀️', '👨‍💼', '👩‍⚕️', '🦁', '🐼', '🦊',
+      '🐱', '👾', '🚀', '🎨', '🐶', '🦄', '🐳', '🍀',
+      '🍕', '🎸', '🎮', '❤️', '👑', '🌈', '🥑', '🕶️'
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            Future<void> pickImage(ImageSource source) async {
+              try {
+                final ImagePicker picker = ImagePicker();
+                final XFile? image = await picker.pickImage(source: source);
+                if (image != null) {
+                  setModalState(() {
+                    pickedImagePath = image.path;
+                    urlCtrl.clear(); // Clear custom image URL if file picked
+                  });
+                }
+              } catch (e) {
+                debugPrint("Error picking image: $e");
+              }
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 24,
+                right: 24,
+                top: 24,
+                bottom: MediaQuery.of(context).viewInsets.bottom + MediaQuery.of(context).padding.bottom + 24,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Editar Perfil 👤',
+                          style: TextStyle(
+                            fontSize: 20 * scale,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF7C3AED),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Name Field
+                    Text(
+                      'Nombre(s)',
+                      style: TextStyle(
+                        fontSize: 14 * scale,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: firstCtrl,
+                      decoration: InputDecoration(
+                        hintText: 'Tu nombre',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(color: Colors.grey.withOpacity(0.2)),
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xFFF5F3FF),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Lastname Field
+                    Text(
+                      'Apellido(s)',
+                      style: TextStyle(
+                        fontSize: 14 * scale,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: lastCtrl,
+                      decoration: InputDecoration(
+                        hintText: 'Tu apellido',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(color: Colors.grey.withOpacity(0.2)),
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xFFF5F3FF),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Camera / Gallery picker buttons
+                    Text(
+                      'Foto desde Cámara o Galería',
+                      style: TextStyle(
+                        fontSize: 14 * scale,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => pickImage(ImageSource.camera),
+                            icon: const Icon(Icons.camera_alt, size: 18),
+                            label: Text('Cámara', style: TextStyle(fontSize: 13 * scale)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFF5F3FF),
+                              foregroundColor: const Color(0xFF7C3AED),
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: const BorderSide(color: Color(0xFFE9D5FF)),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => pickImage(ImageSource.gallery),
+                            icon: const Icon(Icons.photo_library, size: 18),
+                            label: Text('Galería', style: TextStyle(fontSize: 13 * scale)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFF5F3FF),
+                              foregroundColor: const Color(0xFF7C3AED),
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: const BorderSide(color: Color(0xFFE9D5FF)),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (pickedImagePath.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Container(
+                            width: 50,
+                            height: 50,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              image: DecorationImage(
+                                image: FileImage(File(pickedImagePath)),
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              '¡Foto cargada de local!',
+                              style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13 * scale),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, color: Colors.red),
+                            onPressed: () {
+                              setModalState(() {
+                                pickedImagePath = '';
+                              });
+                            },
+                          )
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 20),
+                    
+                    // Preset Emojis Selection
+                    Text(
+                      'O elige un Avatar (Emoji)',
+                      style: TextStyle(
+                        fontSize: 14 * scale,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 56,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: presetEmojis.length,
+                        itemBuilder: (context, index) {
+                          final emoji = presetEmojis[index];
+                          bool isSel = emoji == selectedEmoji && urlCtrl.text.isEmpty && pickedImagePath.isEmpty;
+                          return GestureDetector(
+                            onTap: () {
+                              setModalState(() {
+                                selectedEmoji = emoji;
+                                urlCtrl.clear(); // Clear custom image URL
+                                pickedImagePath = ''; // Clear picked image path
+                              });
+                            },
+                            child: Container(
+                              margin: const EdgeInsets.only(right: 8),
+                              width: 50,
+                              height: 50,
+                              decoration: BoxDecoration(
+                                color: isSel ? const Color(0xFFF5F3FF) : Colors.white,
+                                border: Border.all(
+                                  color: isSel ? const Color(0xFF7C3AED) : Colors.grey.withOpacity(0.1),
+                                  width: isSel ? 2 : 1,
+                                ),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  emoji,
+                                  style: const TextStyle(fontSize: 24),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    
+                    // Custom Image URL Field
+                    Text(
+                      'O usa una URL de foto de perfil',
+                      style: TextStyle(
+                        fontSize: 14 * scale,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: urlCtrl,
+                      onChanged: (val) {
+                        if (val.trim().isNotEmpty) {
+                          setModalState(() {
+                            pickedImagePath = ''; // Clear local path if URL entered
+                          });
+                        }
+                      },
+                      decoration: InputDecoration(
+                        hintText: 'https://ejemplo.com/foto.jpg',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(color: Colors.grey.withOpacity(0.2)),
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xFFF5F3FF),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    
+                    // Save Button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 56,
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          if (firstCtrl.text.trim().isNotEmpty) {
+                            await StorageService.setSettingString('user_first_name', firstCtrl.text.trim());
+                            await StorageService.setSettingString('user_last_name', lastCtrl.text.trim());
+                            await StorageService.setSettingString('user_name', '${firstCtrl.text.trim()} ${lastCtrl.text.trim()}');
+                            await StorageService.setSettingString('user_avatar_emoji', selectedEmoji);
+                            await StorageService.setSettingString('user_avatar_url', urlCtrl.text.trim());
+                            await StorageService.setSettingString('user_avatar_image_path', pickedImagePath);
+                            _loadSettings();
+                            if (widget.onSettingsChanged != null) {
+                              widget.onSettingsChanged!();
+                            }
+                            if (mounted) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('¡Perfil actualizado con éxito! 🎉'),
+                                  backgroundColor: Color(0xFF7C3AED),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF7C3AED),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: Text(
+                          'Guardar Cambios',
+                          style: TextStyle(
+                            fontSize: 16 * scale,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final double scale = StorageService.getFontSizeMultiplier();
     return SafeArea(
       child: Column(
         children: [
@@ -58,12 +425,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: const EdgeInsets.all(24),
             color: Colors.white,
             width: double.infinity,
-            child: const Text(
+            child: Text(
               'Configuración',
               style: TextStyle(
-                fontSize: 20,
+                fontSize: 20 * scale,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF7C3AED),
+                color: const Color(0xFF7C3AED),
               ),
             ),
           ),
@@ -74,7 +441,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 // Profile Card
                 Container(
-                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(24),
@@ -85,48 +451,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                   ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 64,
-                        height: 64,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFF5F3FF),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Center(
-                          child: Text(
-                            'M',
-                            style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF7C3AED),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(24),
+                      onTap: _showEditProfileModal,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            buildAvatarWidget(
+                              emoji: _userAvatarEmoji,
+                              url: _userAvatarUrl,
+                              imagePath: _userAvatarImagePath,
+                              size: 64,
+                              emojiSize: 32,
                             ),
-                          ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _userName,
+                                    style: TextStyle(
+                                      fontSize: 18 * scale,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        'Perfil Básico',
+                                        style: TextStyle(
+                                          fontSize: 14 * scale,
+                                          color: const Color(0xFF7C3AED),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Icon(Icons.edit, size: 14, color: const Color(0xFF7C3AED).withOpacity(0.6)),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 16),
-                      const Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'María Gómez',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87,
-                            ),
-                          ),
-                          Text(
-                            'Perfil Básico',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Color(0xFF7C3AED),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 32),
@@ -265,8 +639,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showOptionsModal(String key, String title, List<String> options) {
+    final double scale = StorageService.getFontSizeMultiplier();
     showModalBottomSheet(
       context: context,
+      useRootNavigator: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -274,17 +650,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (context) {
         String currentValue = StorageService.getSettingString(key, options[0]);
         return Container(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + MediaQuery.of(context).padding.bottom),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 title,
-                style: const TextStyle(
-                  fontSize: 18,
+                style: TextStyle(
+                  fontSize: 18 * scale,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF7C3AED),
+                  color: const Color(0xFF7C3AED),
                 ),
               ),
               const SizedBox(height: 16),
@@ -295,7 +671,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title: Text(
                     opt,
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: 16 * scale,
                       fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                       color: isSelected ? const Color(0xFF7C3AED) : Colors.black87,
                     ),
@@ -317,8 +693,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showHelpModal() {
+    final double scale = StorageService.getFontSizeMultiplier();
     showModalBottomSheet(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
@@ -326,7 +704,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       builder: (context) {
         return Container(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
+          padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + MediaQuery.of(context).padding.bottom),
           constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
           child: SingleChildScrollView(
             child: Column(
@@ -335,12 +713,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
+                    Text(
                       'Ayuda y Soporte 📖',
                       style: TextStyle(
-                        fontSize: 20,
+                        fontSize: 20 * scale,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF7C3AED),
+                        color: const Color(0xFF7C3AED),
                       ),
                     ),
                     IconButton(
@@ -364,7 +742,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 _buildHelpItem(
                   'Información del Proyecto',
-                  'Desarrollado para el proyecto académico de la materia de Interacción Humano-Máquina.\n\nEstudiante: Alexxitoxx / Integrantes del Equipo.',
+                  'Desarrollado para el proyecto académico de la materia de Interacción Humano-Máquina.\n\nIntegrantes del Equipo:\n• Rodríguez Femat Emilio Emanuel\n• Valdez Garcia Paola Sarai\n• Zuluaga Santillan Alejandro',
                 ),
               ],
             ),
@@ -375,6 +753,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildHelpItem(String title, String content) {
+    final double scale = StorageService.getFontSizeMultiplier();
     return Padding(
       padding: const EdgeInsets.only(bottom: 20.0),
       child: Column(
@@ -382,8 +761,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           Text(
             title,
-            style: const TextStyle(
-              fontSize: 16,
+            style: TextStyle(
+              fontSize: 16 * scale,
               fontWeight: FontWeight.bold,
               color: Colors.black87,
             ),
@@ -392,7 +771,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Text(
             content,
             style: TextStyle(
-              fontSize: 14,
+              fontSize: 14 * scale,
               color: Colors.grey[600],
               height: 1.4,
             ),
@@ -405,6 +784,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildSettingGroup(String title, List<Widget> items) {
+    final double scale = StorageService.getFontSizeMultiplier();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -412,8 +792,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           padding: const EdgeInsets.only(left: 8, bottom: 12),
           child: Text(
             title,
-            style: const TextStyle(
-              fontSize: 12,
+            style: TextStyle(
+              fontSize: 12 * scale,
               fontWeight: FontWeight.bold,
               color: Colors.grey,
               letterSpacing: 1.2,
@@ -461,6 +841,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     Function(bool)? onToggle,
     VoidCallback? onTap,
   }) {
+    final double scale = StorageService.getFontSizeMultiplier();
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -468,30 +849,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF5F3FF),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Icon(icon, color: const Color(0xFF7C3AED), size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.black87,
-                    ),
-                  ),
-                ],
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5F3FF),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(icon, color: const Color(0xFF7C3AED), size: 20),
               ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 16 * scale,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black87,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
               if (isToggle)
                 SizedBox(
                   height: 24,
@@ -506,11 +885,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 )
               else if (value != null)
                 Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       value,
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: 14 * scale,
                         color: Colors.grey[400],
                       ),
                     ),

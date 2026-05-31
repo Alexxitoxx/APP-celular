@@ -1,4 +1,5 @@
 0 Alerta sismica
-1 Ambulancia
-2 Patrulla
-3 Ruido de fondo
+1 Ambulancias
+2 Claxon
+3 Patrulla
+4 Ruido de fondo

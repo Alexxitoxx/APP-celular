@@ -91,9 +91,10 @@ class StorageService {
   }
 
   static double getFontSizeMultiplier() {
-    String scale = getSettingString('font_size_scale', 'Mediano');
+    String scale = getSettingString('text_size', 'Grande');
     if (scale == 'Pequeño') return 0.85;
+    if (scale == 'Mediano') return 1.0;
     if (scale == 'Grande') return 1.35;
-    return 1.0;
+    return 1.35;
   }
 }

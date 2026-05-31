@@ -19,6 +19,7 @@ class _TranscribeScreenState extends State<TranscribeScreen> with SingleTickerPr
   
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
+  bool _savedThisSession = false;
 
   @override
   void initState() {
@@ -43,23 +44,30 @@ class _TranscribeScreenState extends State<TranscribeScreen> with SingleTickerPr
 
   void _listen() async {
     if (!_isListening) {
+      _savedThisSession = false;
       bool available = await _speech.initialize(
         onStatus: (val) {
-          if (val == 'done') {
+          debugPrint("[SpeechToText] Estado recibido: $val");
+          if (val == 'done' || val == 'notListening') {
+            if (mounted) {
+              setState(() {
+                _isListening = false;
+                _pulseController.stop();
+                _pulseController.reset();
+              });
+              _saveToHistory();
+            }
+          }
+        },
+        onError: (val) {
+          debugPrint("[SpeechToText] Error recibido: $val");
+          if (mounted) {
             setState(() {
               _isListening = false;
               _pulseController.stop();
               _pulseController.reset();
-              _saveToHistory();
             });
           }
-        },
-        onError: (val) {
-          setState(() {
-            _isListening = false;
-            _pulseController.stop();
-            _pulseController.reset();
-          });
         },
       );
       
@@ -79,18 +87,21 @@ class _TranscribeScreenState extends State<TranscribeScreen> with SingleTickerPr
         );
       }
     } else {
-      setState(() {
-        _isListening = false;
-        _pulseController.stop();
-        _pulseController.reset();
-      });
+      if (mounted) {
+        setState(() {
+          _isListening = false;
+          _pulseController.stop();
+          _pulseController.reset();
+        });
+      }
       _speech.stop();
       _saveToHistory();
     }
   }
 
   void _saveToHistory() {
-    if (_text.trim().isNotEmpty) {
+    if (!_savedThisSession && _text.trim().isNotEmpty) {
+      _savedThisSession = true;
       final now = DateTime.now();
       String formattedDate = DateFormat('dd/MM HH:mm').format(now);
       
@@ -98,14 +109,16 @@ class _TranscribeScreenState extends State<TranscribeScreen> with SingleTickerPr
         HistoryItem(
           id: now.millisecondsSinceEpoch,
           date: formattedDate,
-          text: _text,
+          text: _text.trim(),
           type: 'Escuchado',
         ),
       );
+      debugPrint("[SpeechToText] Grabado exitosamente en historial: $_text");
     }
   }
 
   void _showLanguageSelector() {
+    final double scale = StorageService.getFontSizeMultiplier();
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
@@ -120,17 +133,17 @@ class _TranscribeScreenState extends State<TranscribeScreen> with SingleTickerPr
           'en_US': 'Inglés (Estados Unidos) 🇺🇸',
         };
         return Container(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + MediaQuery.of(context).padding.bottom),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Idioma del Dictado 🌐',
                 style: TextStyle(
-                  fontSize: 18,
+                  fontSize: 18 * scale,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF7C3AED),
+                  color: const Color(0xFF7C3AED),
                 ),
               ),
               const SizedBox(height: 16),
@@ -141,7 +154,7 @@ class _TranscribeScreenState extends State<TranscribeScreen> with SingleTickerPr
                   title: Text(
                     entry.value,
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: 16 * scale,
                       fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                       color: isSelected ? const Color(0xFF7C3AED) : Colors.black87,
                     ),

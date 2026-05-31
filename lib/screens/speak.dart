@@ -42,7 +42,10 @@ class _SpeakScreenState extends State<SpeakScreen> with SingleTickerProviderStat
   }
   
   void _initTts() async {
-    await _flutterTts.setLanguage("es-US"); // Defaulting to Spanish
+    String selectedLang = StorageService.getSettingString('selected_language', 'es_MX');
+    String ttsLang = selectedLang.replaceAll('_', '-');
+    debugPrint("[TTS Init] Configurando idioma inicial: $ttsLang");
+    await _flutterTts.setLanguage(ttsLang);
     await _flutterTts.setSpeechRate(0.5);
     await _flutterTts.setVolume(1.0);
     await _flutterTts.setPitch(1.0);
@@ -86,13 +89,41 @@ class _SpeakScreenState extends State<SpeakScreen> with SingleTickerProviderStat
   }
 
   void _handlePlay() async {
-    if (_textController.text.isEmpty) return;
+    debugPrint("[TTS] _handlePlay invocado. Texto actual: '${_textController.text}'");
+    if (_textController.text.isEmpty) {
+      debugPrint("[TTS] El texto está vacío, cancelando speak.");
+      return;
+    }
     
     // Check settings for volume/silent mode
     bool isSilent = StorageService.getSettingBool('silent_mode', false);
-    if (isSilent) return; // don't play if silent
+    debugPrint("[TTS] Modo silencioso: $isSilent");
+    if (isSilent) {
+      debugPrint("[TTS] Modo silencioso activo, omitiendo habla.");
+      return;
+    }
+
+    // Dynamically fetch and apply the configured speaker volume
+    String volumeSetting = StorageService.getSettingString('volume_speaker', 'Alto');
+    double volume = 1.0;
+    if (volumeSetting == 'Bajo') volume = 0.3;
+    if (volumeSetting == 'Medio') volume = 0.6;
+    if (volumeSetting == 'Alto') volume = 1.0;
+    debugPrint("[TTS] Volumen aplicado: $volumeSetting ($volume)");
+    await _flutterTts.setVolume(volume);
     
-    await _flutterTts.speak(_textController.text);
+    String selectedLang = StorageService.getSettingString('selected_language', 'es_MX');
+    String ttsLang = selectedLang.replaceAll('_', '-');
+    debugPrint("[TTS] Idioma dinámico aplicado para speak: $ttsLang");
+    await _flutterTts.setLanguage(ttsLang);
+    
+    try {
+      debugPrint("[TTS] Ejecutando _flutterTts.speak...");
+      var result = await _flutterTts.speak(_textController.text);
+      debugPrint("[TTS] Resultado de speak: $result");
+    } catch (e) {
+      debugPrint("[TTS] Excepción en speak: $e");
+    }
     _saveToHistory(); // Optionally save when speaking
   }
   

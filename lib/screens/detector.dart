@@ -4,10 +4,13 @@ import 'package:tflite_audio/tflite_audio.dart';
 import 'package:vibration/vibration.dart';
 import 'package:torch_light/torch_light.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import '../services/storage_service.dart';
 
 class DetectorScreen extends StatefulWidget {
   final bool triggerEmergencyOnInit;
-  const DetectorScreen({super.key, this.triggerEmergencyOnInit = false});
+  final String? initialAlarmType;
+  const DetectorScreen({super.key, this.triggerEmergencyOnInit = false, this.initialAlarmType});
 
   @override
   State<DetectorScreen> createState() => _DetectorScreenState();
@@ -76,8 +79,11 @@ class _DetectorScreenState extends State<DetectorScreen> with TickerProviderStat
       duration: const Duration(milliseconds: 300),
     );
 
-    // Cargar el modelo e iniciar el monitoreo acústico neural
-    _initTflite();
+    // Cargar el modelo e iniciar el monitoreo acústico neural con un retraso
+    // de seguridad para permitir que el micrófono de fondo se libere completamente
+    Future.delayed(const Duration(milliseconds: 600), () {
+      if (mounted) _initTflite();
+    });
 
     // Iniciar la fluctuación fluida y orgánica del radar central morado
     _waveTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
@@ -92,16 +98,16 @@ class _DetectorScreenState extends State<DetectorScreen> with TickerProviderStat
     // Comprobar si se requiere disparar la alarma de emergencia inmediatamente al abrir la pantalla
     if (widget.triggerEmergencyOnInit) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _triggerAlarm('Alerta de Emergencia Manual 🚨', isSimulated: true);
+        _triggerAlarm(widget.initialAlarmType ?? 'Alerta de Emergencia 🚨', isSimulated: false);
       });
     }
   }
 
   @override
   void dispose() {
-    _stopTfliteListening();
+    _stopTfliteListening(isDisposing: true);
     _waveTimer?.cancel();
-    _stopAllAlerts();
+    _stopAllAlerts(isDisposing: true);
     _waveController.dispose();
     _strobeController.dispose();
     super.dispose();
@@ -117,9 +123,11 @@ class _DetectorScreenState extends State<DetectorScreen> with TickerProviderStat
       }
 
       if (!status.isGranted) {
-        setState(() {
-          _lastWords = "Permiso de micrófono requerido.";
-        });
+        if (mounted) {
+          setState(() {
+            _lastWords = "Permiso de micrófono requerido.";
+          });
+        }
         return;
       }
 
@@ -135,9 +143,11 @@ class _DetectorScreenState extends State<DetectorScreen> with TickerProviderStat
       _startTfliteListening();
     } catch (e) {
       debugPrint("Error al cargar modelo TFLite o permisos: $e");
-      setState(() {
-        _lastWords = "Error al inicializar la red neuronal.";
-      });
+      if (mounted) {
+        setState(() {
+          _lastWords = "Error al inicializar la red neuronal.";
+        });
+      }
     }
   }
 
@@ -145,10 +155,12 @@ class _DetectorScreenState extends State<DetectorScreen> with TickerProviderStat
   void _startTfliteListening() {
     if (_isAlarmActive || _tfliteSubscription != null) return;
 
-    setState(() {
-      _isListening = true;
-      _lastWords = "Monitoreando IA local activa...";
-    });
+    if (mounted) {
+      setState(() {
+        _isListening = true;
+        _lastWords = "Monitoreando IA local activa...";
+      });
+    }
 
     try {
       // Configuramos la grabación continua con el sample rate e input de Teachable Machine
@@ -157,22 +169,25 @@ class _DetectorScreenState extends State<DetectorScreen> with TickerProviderStat
         audioLength: 44032, // Requerido por Teachable Machine para ventana de 1s
         bufferSize: 22016,  // Mitad del audioLength
         numOfInferences: 10000, // Inferencia continua durante miles de ventanas consecutivas
+        detectionThreshold: 0.75, // Aumentar confianza a 75% para evitar falsas alarmas sismicas
       );
 
       _tfliteSubscription = recognitionStream.listen(
         (event) {
           if (!mounted || _isAlarmActive) return;
+          if (!StorageService.getSettingBool('emergency_alerts', true)) return;
 
           String result = event["recognitionResult"] ?? "";
           debugPrint("Inferencia IA: $result");
 
-          // Si el resultado predice una clase que no es Ruido de Fondo, disparamos la alerta respectiva
-          if (result.contains("Alerta sismica")) {
+          if (result.contains("Alerta sismica") || result.contains("Alerta sísmica")) {
             _triggerAlarm('Alerta Sísmica 🚨', isSimulated: false);
-          } else if (result.contains("Ambulancia")) {
+          } else if (result.contains("Ambulancia") || result.contains("Ambulancias")) {
             _triggerAlarm('Ambulancia 🚑', isSimulated: false);
           } else if (result.contains("Patrulla")) {
             _triggerAlarm('Patrulla 🚓', isSimulated: false);
+          } else if (result.contains("Claxon")) {
+            _triggerAlarm('Claxon de Auto 🔊', isSimulated: false);
           }
         },
         onError: (err) {
@@ -199,21 +214,57 @@ class _DetectorScreenState extends State<DetectorScreen> with TickerProviderStat
     }
   }
 
-  void _stopTfliteListening() {
+  void _stopTfliteListening({bool isDisposing = false}) {
     _tfliteSubscription?.cancel();
     _tfliteSubscription = null;
-    if (mounted) {
+    try {
+      TfliteAudio.stopAudioRecognition();
+      debugPrint("[Detector IA] TfliteAudio.stopAudioRecognition() llamado con éxito.");
+    } catch (e) {
+      debugPrint("[Detector IA] Error al llamar stopAudioRecognition: $e");
+    }
+    if (mounted && !isDisposing) {
       setState(() {
         _isListening = false;
       });
     }
   }
 
-  // Activar la alerta visual, sonora y física de alto impacto
+  void _checkPermissionAndStart() async {
+    var status = await Permission.microphone.status;
+    if (status.isGranted) {
+      _startTfliteListening();
+    } else {
+      _initTflite();
+    }
+  }
+
+
+  void _speakAlarm(String alarmType) async {
+    bool isSilent = StorageService.getSettingBool('silent_mode', false);
+    if (isSilent) return;
+
+    try {
+      FlutterTts flutterTts = FlutterTts();
+      await flutterTts.setLanguage("es-US");
+
+      String tone = StorageService.getSettingString('alert_tone', 'Fuerte');
+      double volume = 1.0;
+      if (tone == 'Suave') volume = 0.3;
+      if (tone == 'Medio') volume = 0.6;
+      await flutterTts.setVolume(volume);
+
+      String cleanedText = alarmType.replaceAll(RegExp(r'[^\w\sÁÉÍÓÚáéíóúÑñ]'), '').trim();
+      await flutterTts.speak("Atención. Alerta de $cleanedText detectada.");
+    } catch (e) {
+      debugPrint("Error al reproducir audio de alerta: $e");
+    }
+  }
+
   void _triggerAlarm(String alarmType, {required bool isSimulated}) {
     if (_isAlarmActive) return;
 
-    // Detener el micrófono de TfliteAudio de inmediato para liberar recursos de hardware
+    // Detener la grabación temporalmente para dar prioridad visual/sensorial
     _stopTfliteListening();
 
     setState(() {
@@ -231,6 +282,9 @@ class _DetectorScreenState extends State<DetectorScreen> with TickerProviderStat
 
     // 3. Activar el parpadeo físico del flash de la cámara del dispositivo
     _triggerCameraFlash();
+
+    // 4. Anuncio hablado inteligente de alerta
+    _speakAlarm(alarmType);
   }
 
   // Iniciar parpadeo del flash/linterna de la cámara física del celular
@@ -263,6 +317,7 @@ class _DetectorScreenState extends State<DetectorScreen> with TickerProviderStat
 
   // Ejecutar el patrón rítmico personalizado de vibración del dispositivo
   void _triggerVibration() async {
+    if (!StorageService.getSettingBool('alert_vibration', true)) return;
     try {
       bool? hasVib = await Vibration.hasVibrator();
       if (hasVib == true) {
@@ -279,7 +334,7 @@ class _DetectorScreenState extends State<DetectorScreen> with TickerProviderStat
   }
 
   // Detener de forma 100% segura y redundante todos los canales activos de alerta
-  void _stopAllAlerts() async {
+  void _stopAllAlerts({bool isDisposing = false}) async {
     try {
       if (mounted) {
         ScaffoldMessenger.of(context).clearSnackBars();
@@ -309,7 +364,7 @@ class _DetectorScreenState extends State<DetectorScreen> with TickerProviderStat
       await Vibration.cancel();
     } catch (_) {}
 
-    if (mounted) {
+    if (mounted && !isDisposing) {
       setState(() {
         _isAlarmActive = false;
         _activeAlarmType = "";
@@ -317,8 +372,10 @@ class _DetectorScreenState extends State<DetectorScreen> with TickerProviderStat
       });
     }
 
-    // Volver a iniciar el monitoreo inteligente
-    _startTfliteListening();
+    // Volver a iniciar el monitoreo inteligente si no estamos desmontando el widget
+    if (!isDisposing) {
+      _startTfliteListening();
+    }
   }
 
   @override
@@ -413,272 +470,195 @@ class _DetectorScreenState extends State<DetectorScreen> with TickerProviderStat
 
   // Interfaz visual parpadeante durante la alarma de peligro
   Widget _buildAlarmUI() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        // Icono gigante parpadeante de peligro
-        Container(
-          width: 120,
-          height: 120,
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.2),
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(
-            Icons.warning_rounded,
-            size: 80,
-            color: Colors.white,
-          ),
-        ),
-        const SizedBox(height: 24),
-        Text(
-          '¡PELIGRO DETECTADO!',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 28,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 1.5,
-            shadows: [
-              Shadow(
-                color: Colors.black.withOpacity(0.25),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
+    return Center(
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const SizedBox(height: 20),
+            // Icono gigante parpadeante de peligro
+            Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                shape: BoxShape.circle,
               ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-          decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.3),
-            borderRadius: BorderRadius.circular(30),
-          ),
-          child: Text(
-            _activeAlarmType.toUpperCase(),
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
+              child: const Icon(
+                Icons.warning_rounded,
+                size: 80,
+                color: Colors.white,
+              ),
             ),
-          ),
-        ),
-        const SizedBox(height: 32),
-        // Botón físico para detener y reiniciar la alerta
-        ElevatedButton.icon(
-          onPressed: _stopAllAlerts,
-          icon: const Icon(Icons.close_rounded, size: 28),
-          label: const Text('DETENER ALERTA', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          style: ElevatedButton.styleFrom(
-            foregroundColor: const Color(0xFFEF4444),
-            backgroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
+            const SizedBox(height: 24),
+            Text(
+              '¡PELIGRO DETECTADO!',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 28,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.5,
+                shadows: [
+                  Shadow(
+                    color: Colors.black.withOpacity(0.25),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
             ),
-            elevation: 8,
-          ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(30),
+              ),
+              child: Text(
+                _activeAlarmType.toUpperCase(),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            // Botón físico para detener y reiniciar la alerta
+            ElevatedButton.icon(
+              onPressed: _stopAllAlerts,
+              icon: const Icon(Icons.close_rounded, size: 28),
+              label: const Text('DETENER ALERTA', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                foregroundColor: const Color(0xFFEF4444),
+                backgroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                elevation: 8,
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
         ),
-      ],
+      ),
     );
   }
 
   // Interfaz de monitoreo con la onda de sonido animada central y simulador de prueba
   Widget _buildSoundWaveUI() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const Spacer(),
-        // Representación visual de las ondas de audio circulares expansivas
-        Stack(
-          alignment: Alignment.center,
+    return Center(
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Ondas de sonido circulares concéntricas animadas
-            for (int i = 1; i <= 3; i++)
-              AnimatedBuilder(
-                animation: _waveController,
-                builder: (context, child) {
-                  double waveValue = (_waveController.value + (i * 0.33)) % 1.0;
-                  double scale = 1.0 + (waveValue * (1.0 + _soundLevel * 1.5));
-                  double opacity = (1.0 - waveValue) * 0.4;
-                  return Transform.scale(
-                    scale: scale,
-                    child: Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: const Color(0xFF7C3AED).withOpacity(opacity.clamp(0.0, 1.0)),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            // Botón/Radar central morado del micrófono
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                color: const Color(0xFF7C3AED),
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF7C3AED).withOpacity(0.4),
-                    blurRadius: 16,
-                    offset: const Offset(0, 8),
+            const SizedBox(height: 24),
+            // Representación visual de las ondas de audio circulares expansivas
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                // Ondas de sonido circulares concéntricas animadas
+                for (int i = 1; i <= 3; i++)
+                  AnimatedBuilder(
+                    animation: _waveController,
+                    builder: (context, child) {
+                      double waveValue = (_waveController.value + (i * 0.33)) % 1.0;
+                      double scale = 1.0 + (waveValue * (1.0 + _soundLevel * 1.5));
+                      double opacity = (1.0 - waveValue) * 0.4;
+                      return Transform.scale(
+                        scale: scale,
+                        child: Container(
+                          width: 100,
+                          height: 100,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: const Color(0xFF7C3AED).withOpacity(opacity.clamp(0.0, 1.0)),
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                ],
-              ),
-              child: const Icon(
-                Icons.online_prediction_rounded,
-                color: Colors.white,
-                size: 44,
+                // Botón/Radar central morado del micrófono
+                Container(
+                  width: 90,
+                  height: 90,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF7C3AED),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF7C3AED).withOpacity(0.4),
+                        blurRadius: 15,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: IconButton(
+                    icon: Icon(
+                      _isListening ? Icons.mic_rounded : Icons.mic_none_rounded,
+                      color: Colors.white,
+                      size: 40,
+                    ),
+                    onPressed: () {
+                      if (_isListening) {
+                        _stopTfliteListening();
+                      } else {
+                        _checkPermissionAndStart();
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 32),
+            Text(
+              _isListening ? 'ESCUCHANDO EL ENTORNO' : 'IA LOCAL PAUSADA',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF7C3AED),
+                letterSpacing: 1.0,
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: 24),
-        const Text(
-          'Monitoreo Inteligente Activo',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF7C3AED),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: const Color(0xFF7C3AED).withOpacity(0.08),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(
-                width: 8,
-                height: 8,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF7C3AED)),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                _lastWords,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: Color(0xFF7C3AED),
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        const Spacer(),
-        // Panel Premium de Simulación Manual (Fail-Safe para la demostración académica)
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Simulación de Emergencias (Demostración)',
+            const SizedBox(height: 10),
+            Text(
+              _lastWords,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey,
-                letterSpacing: 0.8,
+                fontSize: 13,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
               ),
             ),
-            const SizedBox(height: 12),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 2.2,
+            const SizedBox(height: 16),
+            // Instrucción amigable solicitada por el usuario
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF7C3AED).withOpacity(0.08),
+                borderRadius: BorderRadius.circular(16),
               ),
-              itemCount: _soundCategories.length,
-              itemBuilder: (context, index) {
-                final cat = _soundCategories[index];
-                return GestureDetector(
-                  onTap: () => _triggerAlarm(cat['name'], isSimulated: true),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: cat['color'].withOpacity(0.15),
-                        width: 1.5,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.02),
-                          blurRadius: 6,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: cat['color'].withOpacity(0.1),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              cat['icon'],
-                              color: cat['color'],
-                              size: 20,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  cat['name'],
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF1E1B4B),
-                                  ),
-                                ),
-                                Text(
-                                  cat['desc'],
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    color: Colors.grey[500],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
+              child: Text(
+                _isListening
+                    ? 'Presiona el micrófono para pausar la escucha'
+                    : 'Presiona el micrófono para comenzar a escuchar',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF7C3AED),
+                  fontWeight: FontWeight.w600,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
             ),
+            const SizedBox(height: 24),
           ],
         ),
-        const SizedBox(height: 8),
-      ],
+      ),
     );
   }
 }
